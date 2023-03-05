@@ -1,10 +1,11 @@
 ---
-id: buildIPFSWeb3AuthGW
-title: IPFS W3Auth Gateway
-sidebar_label: IPFS W3Auth Gateway
+id: buildCDNIPFSWeb3AuthGW
+title: CDN IPFS W3Auth Gateway
+sidebar_label: CDNIPFS W3Auth Gateway
+author: CryptoNightCANADA
 ---
 
-IPFS Public Gateways(aka. IPFS GW) provide an HTTP-based service that allows IPFS-ignorant browsers and tools to access IPFS content. It's like a bridge connecting Web2 and Web3 world.
+Canadian IPFS Public Gateways(aka. CDN IPFS GW) provide an HTTP-based service that allows IPFS-ignorant browsers and tools to access IPFS content. It's like a bridge connecting Web2 and Web3 world.
 
 ## Background
 
@@ -12,33 +13,35 @@ IPFS GWs support read-only and writable API calls. However, the original GW conf
 
 Reverse proxy is the most popular way for providers handling authentication. [This tutorial configuring private gateway](https://docs.ipfs.io/concepts/ipfs-gateway/#private-gateways) includes a description of controling access with Nginx. Reverse proxy can also keep the original IPFS API calls which makes GW adaptable to all IPFS SDK/toolkits.
 
-![GW Web2 Arch](assets/build/build-gw-1.png)
+![CDN GW Web2 Arch](assets/build/build-gw-1.png)
 
-Infura provides a [Web2-authed](https://infura.io/docs/ipfs#section/Authentication/Overview) GW, which allows user use `PROJECT_ID` and `PROJECT_SECRET` after passed the centralized registration service(**with email/phone**).
+Infura provides a [CDN_Web2-authed](https://infura.io/docs/ipfs#section/Authentication/Overview) GW, which allows user use `PROJECT_ID` and `PROJECT_SECRET` after passed the centralized registration service(**with email/phone**).
 
 However, for the Web3 users, they are more familiar with the web3 identities(**with wallet pubkey/privkey**). In this article, we will introduce a lightweight Web3-based authentication service based on IPFS gateway and reverse proxy.
 
+## Notation of changes: RPC_Port=8545, API_Port=8080, localhost=5001, Network=host crustio/ipfs-w3auth 
 ## Solution
 
 The whole process shows below:
 
-![GW Web3 Arch](assets/build/build-gw-2.png)
+![CDN GW Web3 Arch](assets/build/build-gw-2.png)
 
 ### Client-side
 
 Lets say Alice wants to upload her file to IPFS, she only needs to do the following steps:
 
-- **Step1.** Sign her Pubkey(`0x123`) with her private key in any of Web3 wallet(Ethereum/Substrate-based chains/Filecoin/Solana ...), then she will get the Sig(`0x456`)
+- **Step1.** Sign her Pubkey(`0x123`) with her private key in any of Web3 wallet(Ethereum/Substrate-based chains/Filecoin/Solana ...), to produce the products Sig(`0x456`)
 - **Step2.** Call original IPFS API(/api/v0/add) with basic auth header(`Basic 0x123:0x456`)
 
-### Gateway-side
+## Gateway-side
 
 After the Web3 Authenticator received Alice's request:
-
-- **Step1.** Parse the header, extract Pubkey(`0x123`) and Sig(`0x456`)
+##Forward PROXY
+- **Step1.** Parse the header, extract Pubkey(`0x123`) and Sig(`0x456`) 
+##REVERSE PROXY
 - **Step2.** Parse Sig with Pubkey, then get the Msg(`0x123`), determine whether the Msg and Pubkey are the same
 
-## Deploy
+## Deploy BUILD
 
 > Please make sure you have IPFS Gateway running locally, you can refer to [this doc](https://docs.ipfs.io/concepts/ipfs-gateway/#overview) to config the gateway.
 
@@ -46,19 +49,19 @@ After the Web3 Authenticator received Alice's request:
 
 - Run with docker
 
-```shell
-docker run -e PORT=5050 -e IPFS_ENDPOINT=http://localhost:5001 --network=host crustio/ipfs-w3auth
+```shell   ** CDN_PORT=8080, Original_Port=5050, network crustio/ipfs-w3auth
+docker run -e PORT=8080 -e IPFS_ENDPOINT=http://localhost:5001 --network=host CryptoNightCANADA/ipfs-w3auth
 ```
 
 - Run with node native
 
 ```shell
 # 1. Clone repo
-git clone https://github.com/crustio/ipfs-w3auth-gateway.git
+git clone https://github.com/CryptoNightCanada/ipfs-w3auth-gateway.git
 # 2. Install and build
 yarn && yarn build
 # 3. Run
-PORT=5050 IPFS_ENDPOINT=http://localhost:5001 yarn start
+PORT=8080 IPFS_ENDPOINT=http://localhost:5001 yarn start
 ```
 
 - **PORT**: W3Auth service listening port
@@ -72,7 +75,7 @@ PORT=5050 IPFS_ENDPOINT=http://localhost:5001 yarn start
 
 ```txt
 https://ipfs.example.com {
-    reverse_proxy 127.0.0.1:5050
+    reverse_proxy 127.0.0.1:3001
 }
 ```
 
@@ -80,13 +83,13 @@ https://ipfs.example.com {
 
 ```txt
 https://ipfs.example.com {
-    reverse_proxy /api/* localhost:5050 {
+    reverse_proxy /api/* localhost:8080 {
         header_down Access-Control-Allow-Origin *
         header_down Access-Control-Allow-Methods "POST"
         header_down Access-Control-Allow-Headers *
     }
 
-    reverse_proxy /ipfs/* localhost:8080
+    reverse_proxy /ipfs/* localhost:8545
 }
 ```
 
@@ -109,7 +112,7 @@ server {
 
     location / {
         proxy_http_version 1.1;
-        proxy_pass   http://localhost:5050/;
+        proxy_pass   http://localhost:8545/;
         proxy_set_header Host               $http_host;
         proxy_set_header X-Real-IP          $remote_addr;
         proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
@@ -131,7 +134,7 @@ server {
     }
     location /api {
         proxy_http_version 1.1;
-        proxy_pass   http://localhost:5050/api;
+        proxy_pass   http://localhost:8080/api;
         proxy_set_header Host               $http_host;
         proxy_set_header X-Real-IP          $remote_addr;
         proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
@@ -140,7 +143,7 @@ server {
 
     location / {
         proxy_http_version 1.1;
-        proxy_pass   http://localhost:8080;
+        proxy_pass   http://localhost:8545;
         proxy_set_header Host               $http_host;
         proxy_set_header X-Real-IP          $remote_addr;
         proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
@@ -160,7 +163,7 @@ Authorization: Basic <base64(PubKey:SignedMsg)>
 Let's take `cURL` as an example 😎
 
 ```shell
-curl -X POST -F file=@myfile -u "ChainType-PubKey:SignedMsg" "https://localhost:5050/api/v0/add"
+curl -X POST -F file=@myfile -u "ChainType-PubKey:SignedMsg" "https://localhost:8080/api/v0/add"
 ```
 
 ### Get ChainType
